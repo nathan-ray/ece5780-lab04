@@ -19,18 +19,16 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
+volatile char received_val[2];
+volatile int new_data = 0;
+
 void SystemClock_Config(void);
 
 void transmitChar(char c) {
 	// continue looping if transmit data register is empty
-	if ( (USART3->ISR & 128) == 0) {
-		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
-	}
-	
 	while ( (USART3->ISR & 128) == 0) {
 		
 	}
-	
 	
 	USART3->TDR = c;
 	return;
@@ -45,6 +43,37 @@ void transmitString(char string[]) {
 		return;
 }
 
+void partOne () {
+		switch (USART3->RDR) {
+		case 'r':
+			HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+			break;
+		case 'o':
+			HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+			break;
+		case 'b':
+			HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+			break;
+		case 'g':
+			HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+			break;
+		default:
+			transmitString("Unknown Command...\n\r");
+	}
+	
+}
+
+void USART3_4_IRQHandler() {
+	if (new_data == 0) {
+		received_val[0] = USART3->RDR;
+		new_data = 1;
+	}
+	else if (new_data == 1) {
+		received_val[1] = USART3->RDR;
+		new_data = 2;
+	}
+
+}
 
 /**
   * @brief  The application entry point.
@@ -56,20 +85,19 @@ int main(void)
   SystemClock_Config();
 	__HAL_RCC_GPIOC_CLK_ENABLE(); // Enable the GPIOC clock in the RCC
 	// Set up a configuration of LEDs
-	GPIO_InitTypeDef initStr = {GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_6 | GPIO_PIN_7,
+	GPIO_InitTypeDef initStr = {GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9,
 	GPIO_MODE_OUTPUT_PP,
 	GPIO_SPEED_FREQ_LOW,
 	GPIO_NOPULL};
 	HAL_GPIO_Init(GPIOC, &initStr); // Initialize pins PC6, PC7, PC8 & PC9
 	
-	// enable system clock as USART3 clock
-	RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
-	
 	// USART3_TX = PC4
 	// USART3_RX = PC5
-	
 	// USB-UART Transmit 	(TX) -> STM32F0 Receive 	(RX)
 	// USB-UART Receive 	(RX) -> STM32F0 Transmit 	(TX)
+	
+	// enable system clock as USART3 clock
+	RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
 	
 	// setting to Alternate Function Mode
 	// PC4
@@ -96,45 +124,115 @@ int main(void)
 	// setting Baud rate to be 115200
 	// USART3->BRR &= ~(1 << 20);	// disable auto buad rate
 	
-	USART3->CR1 |= (1 << 5);
-	
 	USART3->CR1 |= (1 << 3);	// enable TX
 	USART3->CR1 |= (1 << 2);  // enable RX
 	
-	/*
 	int f = HAL_RCC_GetHCLKFreq();
 	int target = 115200;
-	int brr_val = f / target;
-	*/
-	USART3->BRR = 8000000 / 115200 ;
+	
+	USART3->BRR = f / target ;
+	
+	// interrupt enable
+	USART3->CR1 |= (1 << 5);
+	NVIC_EnableIRQ(29);
+	NVIC_SetPriority(29, 1);
+	
 	
 	USART3->CR1 |= (1 << 0);		// enable USART
 	
   while (1)
   {
 		HAL_Delay(200);
-
+		
+		new_data = 0;
+		transmitString("CMD?\n\r");
+		
+		while ( new_data != 2) {
 			
-		while ( (USART3->ISR & 32) == 0) {
 			
 		}
 		
-		switch (USART3->RDR) {
-			case 'r':
-				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+		switch (received_val[0]) {
+			case 'r': {
+					if (received_val[1] == '0') {
+						HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+						transmitString("Turned off red.\n\r");
+					}
+					else if (received_val[1] == '1') {
+						HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
+						transmitString("Turned on red.\n\r");
+					}
+					else if (received_val[1] == '2') {
+						HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+						transmitString("Toggled red.\n\r");
+					}
+					else {
+						transmitString("Unknown command! Try again.\n\r");
+					}
 				break;
-			case 'o':
-				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+			}
+			case 'b': {
+				if (received_val[1] == '0') {
+					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+					transmitString("Turned off blue.\n\r");
+				}
+				else if (received_val[1] == '1') {
+					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+					transmitString("Turned on blue.\n\r");
+				}
+				else if (received_val[1] == '2') {
+					HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+					transmitString("Toggled blue.\n\r");
+				}
+				else {
+					transmitString("Unknown command! Try again.\n\r");
+				}
 				break;
-			case 'b':
-				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+			}
+			case 'o': {
+				if (received_val[1] == '0') {
+					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
+					transmitString("Turned off orange.\n\r");
+				}
+				else if (received_val[1] == '1') {
+					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
+					transmitString("Turned on orange.\n\r");
+				}
+				else if (received_val[1] == '2') {
+					HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+					transmitString("Toggled orange.\n\r");
+				}
+				else {
+					transmitString("Unknown command! Try again.\n\r");
+				}
 				break;
-			case 'g':
-				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+			}
+			case 'g': {
+				if (received_val[1] == '0') {
+					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+					transmitString("Turned off green.\n\r");
+				}
+				else if (received_val[1] == '1') {
+					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+					transmitString("Turned on green.\n\r");
+				}
+				else if (received_val[1] == '2') {
+					HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+					transmitString("Toggled green.\n\r");
+				}
+				else {
+					transmitString("Unknown command! Try again.\n\r");
+				}
 				break;
-			default:
-				transmitString("Unknown Command...\0");
+			}
+			default: {
+				transmitString("Unknown command! Try again.\n\r");
+				break;
+			}
 		}
+		
+		// uncomment for the first part of the lab
+		// partOne();
 		
   }
 }
