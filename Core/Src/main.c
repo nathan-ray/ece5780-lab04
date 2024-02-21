@@ -15,46 +15,36 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
-
-/* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-/* USER CODE BEGIN PFP */
 
-/* USER CODE END PFP */
+void transmitChar(char c) {
+	// continue looping if transmit data register is empty
+	if ( (USART3->ISR & 128) == 0) {
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+	}
+	
+	while ( (USART3->ISR & 128) == 0) {
+		
+	}
+	
+	
+	USART3->TDR = c;
+	return;
+}
 
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
+void transmitString(char string[]) {
+		int i = 0;
+		while (string[i] != 0) {
+			transmitChar(string[i]);
+			i++;
+		}
+		return;
+}
 
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -62,40 +52,91 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
   SystemClock_Config();
+	__HAL_RCC_GPIOC_CLK_ENABLE(); // Enable the GPIOC clock in the RCC
+	// Set up a configuration of LEDs
+	GPIO_InitTypeDef initStr = {GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_6 | GPIO_PIN_7,
+	GPIO_MODE_OUTPUT_PP,
+	GPIO_SPEED_FREQ_LOW,
+	GPIO_NOPULL};
+	HAL_GPIO_Init(GPIOC, &initStr); // Initialize pins PC6, PC7, PC8 & PC9
+	
+	// enable system clock as USART3 clock
+	RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
+	
+	// USART3_TX = PC4
+	// USART3_RX = PC5
+	
+	// USB-UART Transmit 	(TX) -> STM32F0 Receive 	(RX)
+	// USB-UART Receive 	(RX) -> STM32F0 Transmit 	(TX)
+	
+	// setting to Alternate Function Mode
+	// PC4
+	GPIOC->MODER |= (1 << 9);
+	GPIOC->MODER &= ~(1 << 8);
+	
+	// PC5
+	GPIOC->MODER |= (1 << 11);
+	GPIOC->MODER &= ~(1 << 10);
 
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
-  /* USER CODE BEGIN 2 */
-
-  /* USER CODE END 2 */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+	// selecting alternate functions AF1
+	// PC4
+	GPIOC->AFR[0] &= ~(1 << 19);
+	GPIOC->AFR[0] &= ~(1 << 18);
+	GPIOC->AFR[0] &= ~(1 << 17);
+	GPIOC->AFR[0] |= (1 << 16);
+	
+	// PC5
+	GPIOC->AFR[0] &= ~(1 << 23);
+	GPIOC->AFR[0] &= ~(1 << 22);
+	GPIOC->AFR[0] &= ~(1 << 21);
+	GPIOC->AFR[0] |= (1 << 20);
+	
+	// setting Baud rate to be 115200
+	// USART3->BRR &= ~(1 << 20);	// disable auto buad rate
+	
+	USART3->CR1 |= (1 << 5);
+	
+	USART3->CR1 |= (1 << 3);	// enable TX
+	USART3->CR1 |= (1 << 2);  // enable RX
+	
+	/*
+	int f = HAL_RCC_GetHCLKFreq();
+	int target = 115200;
+	int brr_val = f / target;
+	*/
+	USART3->BRR = 8000000 / 115200 ;
+	
+	USART3->CR1 |= (1 << 0);		// enable USART
+	
   while (1)
   {
-    /* USER CODE END WHILE */
+		HAL_Delay(200);
 
-    /* USER CODE BEGIN 3 */
+			
+		while ( (USART3->ISR & 32) == 0) {
+			
+		}
+		
+		switch (USART3->RDR) {
+			case 'r':
+				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+				break;
+			case 'o':
+				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+				break;
+			case 'b':
+				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+				break;
+			case 'g':
+				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+				break;
+			default:
+				transmitString("Unknown Command...\0");
+		}
+		
   }
-  /* USER CODE END 3 */
 }
 
 /**
